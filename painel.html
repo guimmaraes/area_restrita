@@ -10,7 +10,6 @@
         .container { background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 320px; text-align: center; margin-top: 50px; }
         button { width: 100%; padding: 12px; margin: 8px 0; border: none; color: #fff; font-weight: bold; border-radius: 4px; cursor: pointer; transition: background 0.3s;}
         
-        /* Cores dos botões para facilitar a identificação visual */
         .btn-tc { background: #00bcd4; color: #000; }
         .btn-tc:hover { background: #0097a7; }
         .btn-glia { background: #9c27b0; }
@@ -28,6 +27,8 @@
         #area-lista-arquivos { width: 90%; max-width: 600px; text-align: left; margin: 20px 0; }
         .arquivo-item { background: #333; padding: 10px; margin: 5px 0; border-radius: 4px; cursor: pointer; display: block; width: 100%; text-align: left; border: 1px solid #444; color: white;}
         .arquivo-item:hover { background: #444; }
+        .pasta-item { background: #555; border-color: #777; }
+        .pasta-item:hover { background: #666; }
         
         .iframe-container { position: relative; width: 90%; height: 80vh; margin-top: 10px; display: none; }
         .iframe-drive { width: 100%; height: 100%; border: none; border-radius: 8px; background: #fff; }
@@ -42,7 +43,6 @@
     <div id="conteudo-dinamico">Carregando permissões...</div>
 </div>
 
-<!-- Área para listar arquivos do Drive -->
 <div id="area-visualizador">
     <button class="btn-voltar" onclick="voltar()">⬅ Voltar ao Menu</button>
     <div id="area-lista-arquivos"></div>
@@ -53,86 +53,61 @@
     </div>
 </div>
 
-<!-- Área temporária para as Cotações (Será expandida depois) -->
 <div id="area-cotacao">
     <button class="btn-voltar" onclick="voltar()">⬅ Voltar ao Menu</button>
     <div class="container" style="width: 80%; max-width: 600px; text-align: left;">
         <h3 id="titulo-cotacao">Nova Cotação</h3>
-        <p>O formulário de preenchimento para a planilha será construído aqui.</p>
+        <p>O formulário de preenchimento para a planilha será construído aqui na próxima etapa.</p>
     </div>
 </div>
 
 <script>
-    // 1. INSIRA AQUI A URL DO SEU APP SCRIPT QUANDO ESTIVER PRONTO
-    const SCRIPT_URL = "SUA_URL_DO_APP_SCRIPT_AQUI"; 
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby35a64w3ELw-WuC8lvq6EsXjgKJ7MZo0gbPhKi1uTuUpIgW8BpoJ1iVOIhjz0_mwg/exec"; 
     
-    // 2. INSIRA SUAS CREDENCIAIS DO SUPABASE AQUI
+    // ATENÇÃO: COLE SUAS CREDENCIAIS DO SUPABASE AQUI NOVAMENTE
     const SUPABASE_URL = "COLE_AQUI_A_URL_DO_NOVO_PROJETO";
     const SUPABASE_ANON_KEY = "COLE_AQUI_A_CHAVE_DO_NOVO_PROJETO";
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // 3. MAPEAMENTO DOS IDs DAS PASTAS DO GOOGLE DRIVE
     const PASTAS_DRIVE = {
-        'LIT_TC': 'ID_DA_PASTA_LITERATURAS_TC',
-        'LIT_GLIA': 'ID_DA_PASTA_LITERATURAS_GLIA',
-        'DOCS': 'ID_DA_PASTA_DOCUMENTOS_DIVERSOS',
-        'CLIENTES': 'ID_DA_PASTA_CLIENTES'
+        'LIT_TC': '1-S_YQv3Bwn8-6V1k-LJpHuIwjGyOsmaD',
+        'LIT_GLIA': '1mmjoB7p4crG6xJAgkZThA4EA9o3TW-zl',
+        'DOCS': '11jTLo7s1N6h3mKEpUNBAGWKgFVC6rkr-',
+        'CLIENTES': '15naz2AEwvXoMPoj141cSzz5zeCLDgZPH'
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
-        carregarPainel();
-    });
+    document.addEventListener('DOMContentLoaded', () => { carregarPainel(); });
 
     async function carregarPainel() {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (!session) { window.location.replace("index.html"); return; }
 
         try {
-            const { data: perfis, error: erroPerfil } = await supabaseClient
-                .from('perfis')
-                .select('nome_completo, nivel')
-                .eq('id', session.user.id.toString());
-
-            if (erroPerfil || !perfis || perfis.length === 0) {
-                document.getElementById('conteudo-dinamico').innerHTML = "<p style='color: #ff5252;'>Erro ao carregar permissões.</p><button class='btn-sair' onclick='sair()'>Sair</button>";
-                return;
-            }
+            const { data: perfis } = await supabaseClient.from('perfis').select('nome_completo, nivel').eq('id', session.user.id.toString());
+            if (!perfis || perfis.length === 0) throw new Error();
 
             const perfil = perfis[0];
             const nivel = perfil.nivel;
-            
-            // Saudação amigável
             document.getElementById('saudacao').innerText = `Olá, ${perfil.nome_completo || 'Usuário'}! (Nível ${nivel})`;
 
             let html = "";
-
-            // Lógica de exibição baseada no Nível
-            // Nível 1, 3 e 4 veem TC
             if ([1, 3, 4].includes(nivel)) {
                 html += `<button class="btn-tc" onclick="abrirCotacao('TC')">📝 Planilha Cotação TC</button>`;
                 html += `<button class="btn-tc" onclick="abrirPasta('LIT_TC')">📚 Literaturas TC Química</button>`;
             }
-            
-            // Nível 2, 3 e 4 veem GLIA
             if ([2, 3, 4].includes(nivel)) {
                 html += `<button class="btn-glia" onclick="abrirCotacao('GLIA')">📝 Planilha Cotação GLIA</button>`;
                 html += `<button class="btn-glia" onclick="abrirPasta('LIT_GLIA')">📚 Literaturas GLIA</button>`;
             }
-
-            // Todos os níveis (1, 2, 3, 4) veem Documentos Diversos
             if ([1, 2, 3, 4].includes(nivel)) {
                 html += `<button class="btn-docs" onclick="abrirPasta('DOCS')">📂 Documentos Diversos</button>`;
             }
-
-            // Apenas Nível 4 vê Clientes
             if (nivel === 4) {
                 html += `<button class="btn-clientes" onclick="abrirPasta('CLIENTES')">📁 Clientes</button>`;
             }
-
             html += `<button class="btn-sair" onclick="sair()">Sair da Conta</button>`;
             document.getElementById('conteudo-dinamico').innerHTML = html;
-
-        } catch (erroGeral) {
+        } catch (e) {
             document.getElementById('conteudo-dinamico').innerHTML = "<p style='color: #ff5252;'>Erro interno.</p><button class='btn-sair' onclick='sair()'>Sair</button>";
         }
     }
@@ -143,17 +118,13 @@
         document.getElementById('titulo-cotacao').innerText = `Nova Cotação - ${tipo}`;
     }
 
-    async function abrirPasta(chavePasta) {
-        const idDaPasta = PASTAS_DRIVE[chavePasta];
-        if(!idDaPasta || idDaPasta.includes('ID_DA_PASTA')) { 
-            alert("ID da pasta não configurado no código."); 
-            return; 
-        }
-
+    async function abrirPasta(idOuChave) {
+        const idDaPasta = PASTAS_DRIVE[idOuChave] || idOuChave;
         document.getElementById('menu-principal').style.display = 'none';
         document.getElementById('area-visualizador').style.display = 'flex';
         document.getElementById('wrapper-iframe').style.display = 'none';
-        document.getElementById('area-lista-arquivos').innerHTML = "Carregando arquivos...";
+        document.getElementById('area-lista-arquivos').style.display = 'block';
+        document.getElementById('area-lista-arquivos').innerHTML = "Carregando...";
 
         try {
             const response = await fetch(`${SCRIPT_URL}?id=${idDaPasta}`);
@@ -165,21 +136,25 @@
     }
 
     function mostrarLista(arquivos) {
-        let html = `<h3>Arquivos Disponíveis</h3>`;
-        if (!arquivos || arquivos.length === 0 || arquivos[0].id === "") { 
-            html += "<p>Nenhum arquivo encontrado ou sem permissão.</p>"; 
-            document.getElementById('area-lista-arquivos').innerHTML = html;
-            return;
+        let html = `<h3>Arquivos</h3>`;
+        if (!arquivos || arquivos.length === 0) { 
+            document.getElementById('area-lista-arquivos').innerHTML = html + "<p>Pasta vazia ou sem permissão.</p>"; return;
         }
 
         arquivos.forEach(arq => {
-            html += `
+            if (arq.isFolder) {
+                html += `
+                <div style="display: flex; margin-bottom: 10px;">
+                    <button class="arquivo-item pasta-item" onclick="abrirPasta('${arq.id}')">📁 ${arq.name}</button>
+                </div>`;
+            } else {
+                html += `
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <button class="arquivo-item" onclick="abrirPDF('${arq.id}')">📄 ${arq.name}</button>
-                    <a href="https://drive.google.com/uc?export=download&id=${arq.id}" target="_blank" style="background: #4caf50; color: white; padding: 10px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; display: flex; align-items: center;">BAIXAR</a>
+                    <a href="https://drive.google.com/uc?export=download&id=${arq.id}" target="_blank" style="background: #4caf50; color: white; padding: 10px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center;">BAIXAR</a>
                 </div>`;
+            }
         });
-
         document.getElementById('area-lista-arquivos').innerHTML = html;
     }
 
@@ -198,10 +173,7 @@
         document.getElementById('area-cotacao').style.display = 'none';
     }
 
-    async function sair() { 
-        await supabaseClient.auth.signOut(); 
-        window.location.href = "index.html"; 
-    }
+    async function sair() { await supabaseClient.auth.signOut(); window.location.href = "index.html"; }
 </script>
 </body>
 </html>
