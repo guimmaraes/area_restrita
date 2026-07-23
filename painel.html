@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel da Área Restrita</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #fff; margin: 0; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+        .container { background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 320px; text-align: center; margin-top: 50px; }
+        button { width: 100%; padding: 12px; margin: 8px 0; border: none; color: #fff; font-weight: bold; border-radius: 4px; cursor: pointer; transition: background 0.3s;}
+        
+        /* Cores dos botões para facilitar a identificação visual */
+        .btn-tc { background: #00bcd4; color: #000; }
+        .btn-tc:hover { background: #0097a7; }
+        .btn-glia { background: #9c27b0; }
+        .btn-glia:hover { background: #7b1fa2; }
+        .btn-docs { background: #4CAF50; }
+        .btn-docs:hover { background: #388E3C; }
+        .btn-clientes { background: #fbc02d; color: #000; }
+        .btn-clientes:hover { background: #f9a825; }
+        
+        .btn-sair { background: #ff5252; margin-top: 20px; }
+        .btn-sair:hover { background: #d32f2f; }
+        .btn-voltar { background: #757575; width: auto; padding: 10px 20px; margin: 10px; }
+        
+        #area-visualizador, #area-cotacao { display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; }
+        #area-lista-arquivos { width: 90%; max-width: 600px; text-align: left; margin: 20px 0; }
+        .arquivo-item { background: #333; padding: 10px; margin: 5px 0; border-radius: 4px; cursor: pointer; display: block; width: 100%; text-align: left; border: 1px solid #444; color: white;}
+        .arquivo-item:hover { background: #444; }
+        
+        .iframe-container { position: relative; width: 90%; height: 80vh; margin-top: 10px; display: none; }
+        .iframe-drive { width: 100%; height: 100%; border: none; border-radius: 8px; background: #fff; }
+        .mascara-seta { position: absolute; top: 0; right: 0; width: 65px; height: 55px; background-color: #121212; z-index: 999; border-top-right-radius: 8px; pointer-events: auto; }
+    </style>
+</head>
+<body>
+
+<div id="menu-principal" class="container">
+    <h2>Painel de Acesso</h2>
+    <div id="saudacao" style="margin-bottom: 20px; color: #bbb; font-size: 14px;"></div>
+    <div id="conteudo-dinamico">Carregando permissões...</div>
+</div>
+
+<!-- Área para listar arquivos do Drive -->
+<div id="area-visualizador">
+    <button class="btn-voltar" onclick="voltar()">⬅ Voltar ao Menu</button>
+    <div id="area-lista-arquivos"></div>
+    
+    <div id="wrapper-iframe" class="iframe-container">
+        <div class="mascara-seta"></div>
+        <iframe id="iframe-drive" class="iframe-drive" src=""></iframe>
+    </div>
+</div>
+
+<!-- Área temporária para as Cotações (Será expandida depois) -->
+<div id="area-cotacao">
+    <button class="btn-voltar" onclick="voltar()">⬅ Voltar ao Menu</button>
+    <div class="container" style="width: 80%; max-width: 600px; text-align: left;">
+        <h3 id="titulo-cotacao">Nova Cotação</h3>
+        <p>O formulário de preenchimento para a planilha será construído aqui.</p>
+    </div>
+</div>
+
+<script>
+    // 1. INSIRA AQUI A URL DO SEU APP SCRIPT QUANDO ESTIVER PRONTO
+    const SCRIPT_URL = "SUA_URL_DO_APP_SCRIPT_AQUI"; 
+    
+    // 2. INSIRA SUAS CREDENCIAIS DO SUPABASE AQUI
+    const SUPABASE_URL = "COLE_AQUI_A_URL_DO_NOVO_PROJETO";
+    const SUPABASE_ANON_KEY = "COLE_AQUI_A_CHAVE_DO_NOVO_PROJETO";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 3. MAPEAMENTO DOS IDs DAS PASTAS DO GOOGLE DRIVE
+    const PASTAS_DRIVE = {
+        'LIT_TC': 'ID_DA_PASTA_LITERATURAS_TC',
+        'LIT_GLIA': 'ID_DA_PASTA_LITERATURAS_GLIA',
+        'DOCS': 'ID_DA_PASTA_DOCUMENTOS_DIVERSOS',
+        'CLIENTES': 'ID_DA_PASTA_CLIENTES'
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        carregarPainel();
+    });
+
+    async function carregarPainel() {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) { window.location.replace("index.html"); return; }
+
+        try {
+            const { data: perfis, error: erroPerfil } = await supabaseClient
+                .from('perfis')
+                .select('nome_completo, nivel')
+                .eq('id', session.user.id.toString());
+
+            if (erroPerfil || !perfis || perfis.length === 0) {
+                document.getElementById('conteudo-dinamico').innerHTML = "<p style='color: #ff5252;'>Erro ao carregar permissões.</p><button class='btn-sair' onclick='sair()'>Sair</button>";
+                return;
+            }
+
+            const perfil = perfis[0];
+            const nivel = perfil.nivel;
+            
+            // Saudação amigável
+            document.getElementById('saudacao').innerText = `Olá, ${perfil.nome_completo || 'Usuário'}! (Nível ${nivel})`;
+
+            let html = "";
+
+            // Lógica de exibição baseada no Nível
+            // Nível 1, 3 e 4 veem TC
+            if ([1, 3, 4].includes(nivel)) {
+                html += `<button class="btn-tc" onclick="abrirCotacao('TC')">📝 Planilha Cotação TC</button>`;
+                html += `<button class="btn-tc" onclick="abrirPasta('LIT_TC')">📚 Literaturas TC Química</button>`;
+            }
+            
+            // Nível 2, 3 e 4 veem GLIA
+            if ([2, 3, 4].includes(nivel)) {
+                html += `<button class="btn-glia" onclick="abrirCotacao('GLIA')">📝 Planilha Cotação GLIA</button>`;
+                html += `<button class="btn-glia" onclick="abrirPasta('LIT_GLIA')">📚 Literaturas GLIA</button>`;
+            }
+
+            // Todos os níveis (1, 2, 3, 4) veem Documentos Diversos
+            if ([1, 2, 3, 4].includes(nivel)) {
+                html += `<button class="btn-docs" onclick="abrirPasta('DOCS')">📂 Documentos Diversos</button>`;
+            }
+
+            // Apenas Nível 4 vê Clientes
+            if (nivel === 4) {
+                html += `<button class="btn-clientes" onclick="abrirPasta('CLIENTES')">📁 Clientes</button>`;
+            }
+
+            html += `<button class="btn-sair" onclick="sair()">Sair da Conta</button>`;
+            document.getElementById('conteudo-dinamico').innerHTML = html;
+
+        } catch (erroGeral) {
+            document.getElementById('conteudo-dinamico').innerHTML = "<p style='color: #ff5252;'>Erro interno.</p><button class='btn-sair' onclick='sair()'>Sair</button>";
+        }
+    }
+
+    function abrirCotacao(tipo) {
+        document.getElementById('menu-principal').style.display = 'none';
+        document.getElementById('area-cotacao').style.display = 'flex';
+        document.getElementById('titulo-cotacao').innerText = `Nova Cotação - ${tipo}`;
+    }
+
+    async function abrirPasta(chavePasta) {
+        const idDaPasta = PASTAS_DRIVE[chavePasta];
+        if(!idDaPasta || idDaPasta.includes('ID_DA_PASTA')) { 
+            alert("ID da pasta não configurado no código."); 
+            return; 
+        }
+
+        document.getElementById('menu-principal').style.display = 'none';
+        document.getElementById('area-visualizador').style.display = 'flex';
+        document.getElementById('wrapper-iframe').style.display = 'none';
+        document.getElementById('area-lista-arquivos').innerHTML = "Carregando arquivos...";
+
+        try {
+            const response = await fetch(`${SCRIPT_URL}?id=${idDaPasta}`);
+            const arquivos = await response.json();
+            mostrarLista(arquivos);
+        } catch (e) { 
+            document.getElementById('area-lista-arquivos').innerHTML = "<p style='color:#ff5252;'>Erro ao buscar arquivos no Drive.</p>"; 
+        }
+    }
+
+    function mostrarLista(arquivos) {
+        let html = `<h3>Arquivos Disponíveis</h3>`;
+        if (!arquivos || arquivos.length === 0 || arquivos[0].id === "") { 
+            html += "<p>Nenhum arquivo encontrado ou sem permissão.</p>"; 
+            document.getElementById('area-lista-arquivos').innerHTML = html;
+            return;
+        }
+
+        arquivos.forEach(arq => {
+            html += `
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <button class="arquivo-item" onclick="abrirPDF('${arq.id}')">📄 ${arq.name}</button>
+                    <a href="https://drive.google.com/uc?export=download&id=${arq.id}" target="_blank" style="background: #4caf50; color: white; padding: 10px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; text-align: center; display: flex; align-items: center;">BAIXAR</a>
+                </div>`;
+        });
+
+        document.getElementById('area-lista-arquivos').innerHTML = html;
+    }
+
+    function abrirPDF(idDoArquivo) {
+        document.getElementById('area-lista-arquivos').style.display = 'none';
+        const iframe = document.getElementById('iframe-drive');
+        iframe.src = `https://drive.google.com/file/d/${idDoArquivo}/preview`;
+        document.getElementById('wrapper-iframe').style.display = 'block';
+    }
+
+    function voltar() {
+        document.getElementById('wrapper-iframe').style.display = 'none';
+        document.getElementById('iframe-drive').src = "";
+        document.getElementById('menu-principal').style.display = 'block';
+        document.getElementById('area-visualizador').style.display = 'none';
+        document.getElementById('area-cotacao').style.display = 'none';
+    }
+
+    async function sair() { 
+        await supabaseClient.auth.signOut(); 
+        window.location.href = "index.html"; 
+    }
+</script>
+</body>
+</html>
