@@ -37,6 +37,7 @@
 </div>
 
 <script>
+    // AS CREDENCIAIS PRECISAM FICAR EXATAMENTE AQUI, NO TOPO DO SCRIPT E COM ASPAS
     const SUPABASE_URL = "COLE_AQUI_A_URL_DO_NOVO_PROJETO";
     const SUPABASE_ANON_KEY = "COLE_AQUI_A_CHAVE_DO_NOVO_PROJETO";
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -57,7 +58,7 @@
             return;
         }
 
-        const email = document.getElementById('email').value;
+        const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
 
         try {
