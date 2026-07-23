@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acesso Restrito</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-container { background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 300px; text-align: center; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; }
+        button { width: 100%; padding: 12px; margin-top: 15px; border: none; background: #00bcd4; color: #fff; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0097a7; }
+        .error { color: #ff5252; margin-top: 15px; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="login-container">
+    <h2>Acesso Restrito</h2>
+    <input type="email" id="email" placeholder="E-mail" required>
+    <input type="password" id="password" placeholder="Senha" required>
+    
+    <div style="text-align: left; margin: 15px 0; font-size: 11px; color: #bbb; display: flex; align-items: flex-start; gap: 8px;">
+        <input type="checkbox" id="aceite-lgpd" style="margin-top: 3px; cursor: pointer;">
+        <label for="aceite-lgpd" style="cursor: pointer; line-height: 1.4;">
+            Li e aceito os <span onclick="mostrarTermos(event)" style="color: #00bcd4; text-decoration: underline; cursor: pointer;">Termos de Uso e Privacidade</span>.
+        </label>
+    </div>
+
+    <div id="texto-termos" style="display: none; background: #333; padding: 10px; font-size: 10px; color: #fff; border-radius: 4px; margin-bottom: 15px; text-align: left; border: 1px solid #555;">
+        Ao acessar, você autoriza o uso de seus dados (Nome, E-mail e Nível de Acesso) exclusivamente para controle de acesso ao painel de Cotações e Literaturas, armazenamento seguro no Supabase e listagem de arquivos, conforme a LGPD.
+    </div>
+
+    <button onclick="fazerLogin()">Entrar</button>
+    <div class="error" id="mensagem-erro"></div>
+</div>
+
+<script>
+    const SUPABASE_URL = "COLE_AQUI_A_URL_DO_NOVO_PROJETO";
+    const SUPABASE_ANON_KEY = "COLE_AQUI_A_CHAVE_DO_NOVO_PROJETO";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function mostrarTermos(event) {
+        event.preventDefault();
+        const divTermos = document.getElementById('texto-termos');
+        divTermos.style.display = divTermos.style.display === 'none' || divTermos.style.display === '' ? 'block' : 'none';
+    }
+
+    async function fazerLogin() {
+        const erroDiv = document.getElementById('mensagem-erro');
+        erroDiv.innerText = "Conectando..."; 
+
+        const aceitou = document.getElementById('aceite-lgpd').checked;
+        if (!aceitou) {
+            erroDiv.innerText = "Você precisa aceitar os Termos de Uso e Privacidade para entrar.";
+            return;
+        }
+
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password,
+            });
+
+            if (authError) throw authError;
+
+            const { data: perfil, error: perfilError } = await supabaseClient
+                .from('perfis')
+                .select('nivel')
+                .eq('id', authData.user.id)
+                .single();
+
+            if (perfilError || !perfil) throw new Error("Erro ao carregar permissões do perfil.");
+
+            const { error: updateError } = await supabaseClient
+                .from('perfis')
+                .update({ aceite_lgpd: true })
+                .eq('id', authData.user.id);
+
+            if (updateError) throw new Error("Falha ao registrar o aceite da LGPD.");
+
+            if ([1, 2, 3, 4].includes(perfil.nivel)) {
+                window.location.href = "painel.html";
+            } else {
+                throw new Error("Perfil sem nível de acesso configurado.");
+            }
+
+        } catch (err) {
+            console.error(err);
+            erroDiv.innerText = err.message || "Erro de rede. Verifique sua conexão.";
+        }
+    }
+</script>
+</body>
+</html>
